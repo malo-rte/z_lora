@@ -1,0 +1,4 @@
+source /opt/west_venv/bin/activate
+
+export REPO_ROOT="$(git rev-parse --show-toplevel)"
+export Z_APP_DIR="${REPO_ROOT}/app"

@@ -1,0 +1,48 @@
+FROM zephyr-build
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+ARG USER_NAME=dev
+ARG USER_UID=1000
+ARG USER_GID=1000
+ARG SERIAL_DEVICE
+ARG SERIAL_DEVICE_GID
+
+ENV SERIAL_DEVICE="${SERIAL_DEVICE}"
+ENV SERIAL_DEVICE_GID="${SERIAL_DEVICE_GID}"
+
+
+USER root
+SHELL ["/bin/bash","-euo","pipefail","-c"]
+
+#----------------------------------------------------
+# Install dev container tools
+#----------------------------------------------------
+RUN apt-get update && \
+    apt-get install --no-install-recommends -y \
+    adduser \
+    neovim \
+    tmux  \
+    stlink-tools \
+    sudo && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+#----------------------------------------------------
+# Make sudo availabe in the dev container
+#----------------------------------------------------
+RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers  && \
+    adduser ${USER_NAME} sudo && \
+    adduser ${USER_NAME} plugdev && \
+    adduser ${USER_NAME} dialout && \
+    getent group "${SERIAL_DEVICE_GID}" > /dev/null || groupadd -g "${SERIAL_DEVICE_GID}" hostdev
+
+
+#----------------------------------------------------
+# Setup JLink
+#----------------------------------------------------
+COPY setup_jlink.sh /tmp/
+RUN /tmp/setup_jlink.sh && rm -f /tmp/setup_jlink.sh
+
+
+USER ${USER_NAME}

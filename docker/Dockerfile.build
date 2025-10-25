@@ -1,0 +1,95 @@
+FROM debian:13.1
+
+ARG USER_NAME=dev
+ARG USER_UID=1000
+ARG USER_GID=1000
+
+ARG Z_VERSION="4.2.0"
+ARG Z_SDK="xtensa-espressif_esp32_zephyr-elf"
+ARG Z_SDK_VERSION="0.17.4"
+ARG Z_SDK_URL_BASE="https://github.com/zephyrproject-rtos/sdk-ng/releases/download/"
+ARG Z_WEST_VERSION="1.5.0"
+
+ARG Z_BOARD="ttgo_tbeam/esp32/procpu"
+
+ENV Z_VERSION="${Z_VERSION}"
+ENV Z_SDK="${Z_SDK}"
+ENV Z_SDK_VERSION="${Z_SDK_VERSION}"
+ENV Z_SDK_NAME="zephyr-sdk-${Z_SDK_VERSION}"
+ENV Z_SDK_ARCHIVE="${Z_SDK_NAME}_linux-x86_64_minimal.tar.xz"
+ENV Z_SDK_URL="${Z_SDK_URL_BASE}/v${Z_SDK_VERSION}/${Z_SDK_ARCHIVE}"
+ENV ZEPHYR_SDK_INSTALL_DIR="/opt/toolchains/${Z_SDK_NAME}"
+ENV Z_WEST_VERSION="${Z_WEST_VERSION}"
+ENV Z_BOARD="${Z_BOARD}"
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=en_US.UTF-8
+
+ARG ZEPHYR_DEPS="\
+    wget \
+    ca-certificates \
+    bash \
+    git \
+    cmake \
+    ninja-build \
+    gperf \
+    ccache \
+    dfu-util \
+    device-tree-compiler \
+    python3-dev \
+    python3-venv \
+    python3-tk \
+    xz-utils \
+    file \
+    make \
+    gcc \
+    gcc-multilib \
+    g++-multilib \
+    libsdl2-dev \
+    libmagic1 \
+"
+
+ARG PACKAGES_TO_INSTALL="${ZEPHYR_DEPS}"
+
+RUN apt-get update && \
+	apt-get install --no-install-recommends -y locales ${PACKAGES_TO_INSTALL} && \
+	localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8 && \
+	rm -rf /var/lib/apt/lists/*
+
+
+# Install the SDK
+RUN wget -O /tmp/${Z_SDK_ARCHIVE} ${Z_SDK_URL} && \
+    mkdir -p /opt/toolchains && \
+    cd /opt/toolchains && \
+    tar xf /tmp/${Z_SDK_ARCHIVE} && \
+    rm -f /tmp/${Z_SDK_ARCHIVE} && \
+    /opt/toolchains/${Z_SDK_NAME}/setup.sh -t ${Z_SDK}
+
+# Setup west + preinstall requirements
+RUN python3 -m venv /opt/west_venv && \
+    /opt/west_venv/bin/pip install --upgrade pip && \
+    /opt/west_venv/bin/pip install "west==${Z_WEST_VERSION}" && \
+    git clone --depth=1 --branch "v${Z_VERSION}" https://github.com/zephyrproject-rtos/zephyr /tmp/zephyr && \
+    /opt/west_venv/bin/pip install -r /tmp/zephyr/scripts/requirements.txt && \
+    /opt/west_venv/bin/pip install pyserial esptool cryptography click pyelftools packaging kconfiglib && \
+    /opt/west_venv/bin/pip install imgtool cbor2 && \
+    rm -rf /tmp/zephyr && \
+    ln -sf /opt/west_venv/bin/west /usr/local/bin/west
+
+ENV IMGTOOL=/opt/west_venv/bin/imgtool
+
+
+
+# Create a non-root user and group with specified UID and GID
+RUN groupadd -g ${USER_GID} ${USER_NAME} && \
+	useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash ${USER_NAME}
+
+
+COPY --chmod=755 ztool /usr/local/bin
+
+USER ${USER_NAME}
+
+COPY bash_rc /home/${USER_NAME}/.bashrc
+RUN  ${ZEPHYR_SDK_INSTALL_DIR}/setup.sh -c
+
+

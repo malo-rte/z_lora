@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+usage() {
+	echo "Usage: $0 clean|update|init|build|rebuild|menuconfig"
+	echo "  clean: Removes build and West-related directories"
+	echo "  init: Initializes and updates the West workspace"
+	echo "  update: Update the West workspace"
+	echo "  build: Builds the project for the specified board"
+	echo "  rebuild: Clears the build directory and then builds the project for the specified board"
+	echo "  menuconfig: Runs menuconfig for the project"
+	#echo "  flash: Flash image"
+	#echo "  jflash: Flash image using J-Link"
+
+	exit 1
+}
+
+die() {
+	printf 'error: %s\n' "$*" >&2
+	exit 1
+}
+
+require_dir() {
+	local name=$1
+	[[ -v "$name" ]] || die "$name is not set"
+	[[ -n "${!name}" ]] || die "$name is empty"
+	[[ -d "${!name}" ]] || die "$name points to missing dir: ${!name@Q}"
+}
+
+require_cmd() {
+	command -v "$1" >/dev/null 2>&1 || die "missing command: $1"
+}
+
+need_board() {
+	[[ -n "${Z_BOARD:-}" ]] || die "Z_BOARD is required for this action"
+}
+
+require_cmd west
+require_dir REPO_ROOT
+require_dir Z_APP_DIR
+
+export BUILD_DIR="${REPO_ROOT}/build"
+export ZEPHYR_BASE="${REPO_ROOT}/zephyr"
+export ESP_IDF_PATH="${ZEPHYR_BASE}/modules/hal/espressif/esp-idf"
+
+if [[ $# -eq 0 ]]; then
+	usage
+fi
+
+while [[ $# -gt 0 ]]; do
+	case $1 in
+	clean)
+		echo "Cleaning project directories..."
+		rm -rf "${REPO_ROOT}/.west"
+		rm -rf "${REPO_ROOT}/bootloader"
+		rm -rf "${REPO_ROOT}/build"
+		rm -rf "${REPO_ROOT}/modules"
+		rm -rf "${REPO_ROOT}/tools"
+		rm -rf "${REPO_ROOT}/zephyr"
+		shift
+		;;
+	init)
+		echo "Initializing West workspace..."
+		cd "${REPO_ROOT}"
+		west init --local "${Z_APP_DIR}"
+		west update
+		west zephyr-export >/dev/null
+
+		shift
+		;;
+	update)
+		cd "${REPO_ROOT}"
+		echo "Update West workspace..."
+		west update
+		west zephyr-export >/dev/null
+		shift
+		;;
+	build)
+		need_board
+		require_dir Z_APP_DIR
+		mkdir -p "${BUILD_DIR}"
+		echo "Building ${Z_APP_DIR} for ${Z_BOARD}"
+		west zephyr-export >/dev/null
+		west build -d "${BUILD_DIR}" -b "${Z_BOARD}" "${Z_APP_DIR}"
+		shift
+		;;
+	rebuild)
+		cd "${REPO_ROOT}"
+		echo "Rebuilding image: ${Z_APP_DIR} for board: ${Z_BOARD}..."
+		rm -rf "${BUILD_DIR}"
+		west zephyr-export >/dev/null
+		west build -d "${BUILD_DIR}" -b "${Z_BOARD}" "${Z_APP_DIR}"
+		shift
+		;;
+
+	esp32flash)
+		[[ -e "${SERIAL_DEVICE}" ]] || die "serial device not found: ${SERIAL_DEVICE}"
+		export ESPTOOL_BAUD=921600
+		west flash -d "${BUILD_DIR}" -- --esp-device "${SERIAL_DEVICE}"
+		shift
+		;;
+
+    esp32monitor)
+        [[ -e "${SERIAL_DEVICE}" ]] || die "serial device not found: ${SERIAL_DEVICE}"
+        west espressif monitor -p "${SERIAL_DEVICE}" -b 115200
+
+	flash)
+		cd "${REPO_ROOT}"
+		echo "Flashing image..."
+		west flash
+		shift
+		;;
+	jflash)
+		cd "${REPO_ROOT}"
+		echo "Flashing image using J-Link..."
+		west flash -r jlink
+		shift
+		;;
+	menuconfig)
+		cd "${REPO_ROOT}"
+		LC_ALL=C west build -t menuconfig
+		shift
+		;;
+	debugserver)
+		cd "${REPO_ROOT}"
+		echo "Starting debug server..."
+		west debugserver
+		shift
+		;;
+	#
+	# TODO: Does not really work, investigate later
+	# spdx)
+	#     cd "${REPO_ROOT}"
+	#     echo "Generating SPDX..."
+	#     west spdx --init --build-dir="${REPO_ROOT}/build"
+	#     west build -p -b "${Z_BOARD}" "${Z_APP_DIR}"
+	#     west spdx --build-dir="${REPO_ROOT}/build"
+	#     shift
+	# ;;
+	*)
+		usage
+		;;
+	esac
+done
+echo "Done!"
+exit 0
