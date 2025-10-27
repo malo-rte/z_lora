@@ -79,8 +79,8 @@ indent_size = 8
 
 # Device tree
 [*.{dts,dtsi,overlay}]
-indent_style = tab
-indent_size = 8
+indent_style = space
+indent_size = 4
 
 # Git commit messages
 [COMMIT_EDITMSG]
@@ -90,3 +90,4 @@ max_line_length = 75
 [Kconfig*]
 indent_style = tab
 indent_size = 8
+

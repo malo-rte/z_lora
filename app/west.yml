@@ -11,7 +11,9 @@ manifest:
       import:
         name-allowlist:
           - hal_espressif
+          - loramac-node
+          - wpa_supplicant
+          - mbedtls
           - mcuboot
-
   self:
     path: .

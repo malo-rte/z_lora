@@ -2,3 +2,7 @@ source /opt/west_venv/bin/activate
 
 export REPO_ROOT="$(git rev-parse --show-toplevel)"
 export Z_APP_DIR="${REPO_ROOT}/app"
+export ZEPHYR_BASE="${REPO_ROOT}/zephyr"
+export ESP_IDF_PATH="${ZEPHYR_BASE}/modules/hal/espressif/esp-idf"
+export PATH=${ZEPHYR_SDK_INSTALL_DIR}/${Z_SDK}/bin:$PATH
+

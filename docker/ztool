@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+export ESPTOOL_BAUD=921600
+export TERMINAL_BAUD=115200
+
 usage() {
 	echo "Usage: $0 clean|update|init|build|rebuild|menuconfig"
 	echo "  clean: Removes build and West-related directories"
@@ -39,7 +42,8 @@ require_cmd west
 require_dir REPO_ROOT
 require_dir Z_APP_DIR
 
-export BUILD_DIR="${REPO_ROOT}/build"
+export BUILD_DIR="${REPO_ROOT}/build-app"
+export BOOT_BUILD_DIR="${REPO_ROOT}/build-boot"
 export ZEPHYR_BASE="${REPO_ROOT}/zephyr"
 export ESP_IDF_PATH="${ZEPHYR_BASE}/modules/hal/espressif/esp-idf"
 
@@ -53,7 +57,8 @@ while [[ $# -gt 0 ]]; do
 		echo "Cleaning project directories..."
 		rm -rf "${REPO_ROOT}/.west"
 		rm -rf "${REPO_ROOT}/bootloader"
-		rm -rf "${REPO_ROOT}/build"
+		rm -rf "${REPO_ROOT}/build-app"
+		rm -rf "${REPO_ROOT}/build-boot"
 		rm -rf "${REPO_ROOT}/modules"
 		rm -rf "${REPO_ROOT}/tools"
 		rm -rf "${REPO_ROOT}/zephyr"
@@ -95,14 +100,54 @@ while [[ $# -gt 0 ]]; do
 
 	esp32flash)
 		[[ -e "${SERIAL_DEVICE}" ]] || die "serial device not found: ${SERIAL_DEVICE}"
-		export ESPTOOL_BAUD=921600
-		west flash -d "${BUILD_DIR}" -- --esp-device "${SERIAL_DEVICE}"
+		west flash \
+			-r esp32 \
+			-d "${BUILD_DIR}" \
+			-- \
+			--esp-device "${SERIAL_DEVICE}" \
+			--esp-baud-rate "${ESPTOOL_BAUD}"
+
 		shift
 		;;
 
-    esp32monitor)
-        [[ -e "${SERIAL_DEVICE}" ]] || die "serial device not found: ${SERIAL_DEVICE}"
-        west espressif monitor -p "${SERIAL_DEVICE}" -b 115200
+	esp32monitor)
+		[[ -e "${SERIAL_DEVICE}" ]] || die "serial device not found: ${SERIAL_DEVICE}"
+		[[ -f "${BUILD_DIR}/zephyr/runners.yaml" ]] || die "no build in ${BUILD_DIR}; run build first"
+
+		pushd "${BUILD_DIR}"
+
+		west espressif monitor \
+			-p "${SERIAL_DEVICE}" \
+			-b ${TERMINAL_BAUD}
+
+		popd
+
+		shift
+		;;
+
+	esp32boot)
+		[[ -e "${SERIAL_DEVICE}" ]] || die "serial device not found: ${SERIAL_DEVICE}"
+		rm -rf "${BOOT_BUILD_DIR}"
+
+		west zephyr-export >/dev/null
+
+		west build \
+			-d "${BOOT_BUILD_DIR}" \
+			-b "${Z_BOARD}" \
+			"zephyr/share/sysbuild" \
+			-- \
+			-DAPP_DIR=${Z_APP_DIR} \
+			-DSB_CONFIG_BOOTLOADER_MCUBOOT=y \
+			-DCONFIG_MCUBOOT_GENERATE_CONFIRMED_IMAGE=n
+
+		west flash \
+			-r esp32 \
+			-d "${BOOT_BUILD_DIR}" \
+			-- \
+			--esp-device "${SERIAL_DEVICE}"
+
+		shift
+		;;
 
 	flash)
 		cd "${REPO_ROOT}"
