@@ -1,6 +1,6 @@
-build/**
+build-app/**
+build-boot/**
 bootloader/**
 modules/**
-zephyr/**
 .west/**
-
+/zephyr/
