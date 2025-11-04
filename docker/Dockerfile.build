@@ -78,6 +78,8 @@ RUN python3 -m venv /opt/west_venv && \
 ENV IMGTOOL=/opt/west_venv/bin/imgtool
 
 
+RUN grep -v ':20:' /etc/group  > /etc/group.new && \
+    mv /etc/group.new /etc/group
 
 # Create a non-root user and group with specified UID and GID
 RUN groupadd -g ${USER_GID} ${USER_NAME} && \
