@@ -5,4 +5,4 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 project(z_lora)
 
-target_sources(app PRIVATE src/main.c src/psram_backend.c)
+target_sources(app PRIVATE src/main.c)
